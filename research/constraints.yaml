@@ -1,0 +1,106 @@
+# G0 — CONSTRAINT LOCK
+# Bạn (human) khóa file này TRƯỚC mọi Research Card.
+# AI không được tự đổi cost/holdout/universe sau khi đã có kết quả.
+
+project: ea_new
+version: "1.0"
+locked_by: "Vu"          # tên bạn
+locked_date: "2026-07-12"        # YYYY-MM-DD
+status: LOCKED          # DRAFT | LOCKED
+
+# --- Universe (khóa cứng; AI không "đề xuất lung tung" trừ khi status=DRAFT) ---
+market:
+  symbols:
+    - XAUUSD 
+    - BTCUSD           # chỉnh theo thực tế bạn trade
+  asset_class: cfd      # forex | cfd | futures | crypto
+  venue: MT5
+  broker_class: "Vantage"      # e.g. ICMarkets-Raw, Exness, ...
+  timezone: "UTC+2"     # timezone data / server — điền đúng
+
+timeframe:
+  primary: M15,H1,H4          # TF quyết định entry
+  allowed: [M15, H1, H4]    # AI không được tự ý ra ngoài list này
+
+session:
+  # giờ server; điền theo broker của bạn
+  trade_windows:
+    - { name: london_open, start: "07:00", end: "11:00" }
+    - { name: ny_overlap, start: "13:00", end: "17:00" }
+  blackout: []          # e.g. news windows nếu có
+
+style:
+  allowed: [momentum, mean_reversion, breakout, session, event]
+  forbidden:
+    - martingale
+    - grid_recovery
+    - unbounded_pyramiding
+    - curve_fit_indicator_soup
+
+# --- Risk ---
+capital_base_usd: 5000
+risk:
+  max_risk_per_trade_pct: 5
+  max_daily_dd_pct: 15
+  max_total_dd_pct: 25
+  max_positions: none
+  max_holding:
+    bars: none
+    # hoặc hours: 8
+
+# --- Cost model (pessimistic baseline — KHÔNG nới lỏng sau khi thấy PnL) ---
+cost_model:
+  mode: pessimistic
+  spread_points: 25          # điền theo symbol; XAU thường lớn hơn FX
+  slippage_points: 10
+  commission_per_lot_roundturn: 7.0
+  swap_enabled: true
+  stress_multipliers: [1.0, 1.5, 2.0]
+
+# --- Sample / statistical floors ---
+sample:
+  min_trades_discovery: 150
+  min_trades_validation: 80
+  min_trades_holdout: 80
+
+# --- Data splits (SEAL holdout — AI không được nhìn cho đến G7) ---
+data_range:
+  # chỉnh theo file data thực tế (vd XAUUSD_M1_...)
+  source_file: "../XAUUSD_M1_202001020600_202606122259.csv"
+  discovery:   { start: "2020-01-01", end: "2023-06-30" }
+  validation:  { start: "2023-07-01", end: "2024-12-31" }
+  holdout_final:
+    start: "2025-01-01"
+    end: "2026-06-12"
+    sealed: true
+    opened: false          # chỉ bạn được set true khi ký G7
+
+# --- Research budget ---
+budget:
+  max_variants_per_family: 5
+  max_free_params: 5
+  max_families_per_month: 4
+
+# --- Metrics (primary duy nhất để quyết định; secondary chỉ chẩn đoán) ---
+metrics:
+  primary: expectancy_R_after_cost   # hoặc deflated_sharpe | avg_trade_after_cost
+  secondary:
+    - profit_factor
+    - max_drawdown_pct
+    - win_rate
+    - avg_trade
+    - top5pct_trade_contribution
+  # Hard kill floors — khóa trước khi chạy; không sửa để "cứu" strategy
+  kill_floors:
+    min_expectancy_R_after_cost: 0.05
+    max_drawdown_pct: 15.0
+    max_top5pct_profit_share: 0.35
+    min_positive_subperiods: 2       # trong 3 subperiods
+    require_permutation_edge_die: true
+
+forbidden_ops:
+  - optimize_on_holdout
+  - change_cost_after_seeing_results
+  - add_filters_after_oos
+  - expand_grid_after_weak_is
+  - use_legacy_prompt_md_as_g1
